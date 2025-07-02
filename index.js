@@ -31,12 +31,18 @@ async function run() {
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
-        // jobs related APIs
+
         const jobsCollection = client.db('jobPortal').collection('jobs')
         const jobApplicationCollection = client.db('jobPortal').collection('job_applications')
 
+        // jobs related APIs
         app.get('/jobs', async (req, res) => {
-            const cursor = jobsCollection.find()
+            const email = req.query.email
+            let query = {}
+            if (email) {
+                query = { hr_email: email }
+            }
+            const cursor = jobsCollection.find(query)
             const result = await cursor.toArray()
             res.send(result)
         })
@@ -48,19 +54,25 @@ async function run() {
             res.send(result)
         })
 
+        app.post('/jobs', async (req, res) => {
+            const newJob = req.body
+            const result = await jobsCollection.insertOne(newJob)
+            res.send(result)
+        })
+
         // Job application apis
         // job all data, get one data, get some data
-        app.get('/job-applications', async (req, res) => {
+        app.get('/job-application', async (req, res) => {
             const email = req.query.email
             const query = { applicant_email: email }
             const result = await jobApplicationCollection.find(query).toArray()
 
             //fokira way to aggregate data
             for (const application of result) {
-                console.log(application.job_id)
+                // console.log(application.job_id)
                 const query1 = { _id: new ObjectId(application.job_id) }
                 const job = await jobsCollection.findOne(query1)
-                if(job){
+                if (job) {
                     application.title = job.title
                     application.company = job.company
                     application.company_logo = job.company_logo
@@ -72,7 +84,7 @@ async function run() {
 
         })
 
-        app.post('/job-applications', async (req, res) => {
+        app.post('/job-application', async (req, res) => {
             const application = req.body
             const result = await jobApplicationCollection.insertOne(application)
             res.send(result)
