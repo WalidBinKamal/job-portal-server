@@ -14,6 +14,27 @@ app.use(cors({
 app.use(express.json())
 app.use(cookieParser())
 
+const logger = async (req, res, next) => {
+    console.log('inside the logger')
+    next()
+}
+
+const verifyToken = (req, res, next) => {
+    const token = req?.cookies?.token
+    if (!token) {
+        return res.status(401).send({ message: 'Unauthorized access' })
+    }
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).send({ message: 'Unauthorized access' })
+        }
+        req.user = decoded
+        next()
+    })
+}
+
+
+
 app.get('/', (req, res) => {
     res.send('Job is falling from the sky')
 })
@@ -44,17 +65,20 @@ async function run() {
         //Auth related APIS
         app.post('/jwt', async (req, res) => {
             const user = req.body
-            const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: "1h" })
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+                expiresIn: '5h'
+            })
             res
                 .cookie('token', token, {
                     httpOnly: true,
-                    secure: false, //http://localhost:5173/signIn
+                    secure: false,
                 })
                 .send({ success: true })
         })
 
         // jobs related APIs
-        app.get('/jobs', async (req, res) => {
+        app.get('/jobs', logger, async (req, res) => {
+            console.log('now inside api call back')
             const email = req.query.email
             let query = {}
             if (email) {
@@ -80,13 +104,15 @@ async function run() {
 
         // Job application apis
         // job all data, get one data, get some data
-        app.get('/job-application', async (req, res) => {
+        app.get('/job-application', verifyToken, async (req, res) => {
             const email = req.query.email
             const query = { applicant_email: email }
 
-            console.log("cookies", req.cookies)
+            if (req.user.email !== req.query.email){
+                return res.status(403).send('Forbidden Access')
+            }
 
-            const result = await jobApplicationCollection.find(query).toArray()
+                const result = await jobApplicationCollection.find(query).toArray()
 
             //fokira way to aggregate data
             for (const application of result) {
@@ -101,7 +127,6 @@ async function run() {
                 }
             }
             res.send(result)
-
         })
 
         app.get('/job-application/jobs/:job_id', async (req, res) => {
